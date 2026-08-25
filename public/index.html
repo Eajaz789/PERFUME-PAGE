@@ -1016,17 +1016,273 @@
   </div>
 
   <div class="account-menu" hidden>
-    <button class="account-view-link" data-view="profile">My Account</button><button class="account-view-link" data-view="orders">My Orders</button><button class="account-view-link" data-view="wishlist">Wishlist</button><button class="logout-button">Logout</button>
+    <button class="account-view-link" data-tab="profile"><i class="fas fa-user-circle"></i> My Account</button>
+    <button class="account-view-link" data-tab="orders"><i class="fas fa-box-open"></i> My Orders</button>
+    <button class="account-view-link" data-tab="wishlist"><i class="fas fa-heart"></i> Wishlist</button>
+    <button class="account-view-link" data-tab="security"><i class="fas fa-shield-alt"></i> Password &amp; Security</button>
+    <a href="/admin" class="admin-portal-link" style="display:none; text-decoration:none; padding:0.85rem 1rem; color:var(--gold); font-weight:600; border-bottom:1px solid rgba(185,154,99,0.15);"><i class="fas fa-shield-halved"></i> Admin Portal</a>
+    <button class="logout-button"><i class="fas fa-arrow-right-from-bracket"></i> Logout</button>
   </div>
 
-  <div class="account-modal" aria-hidden="true">
+  <!-- ========================================== -->
+  <!-- ÉLORIA LUXURY MY ACCOUNT PORTAL -->
+  <!-- ========================================== -->
+  <div class="account-modal" id="account-modal" aria-hidden="true">
     <div class="modal-overlay account-overlay"></div>
-    <div class="account-content">
-      <button class="modal-close account-close" aria-label="Close"><i class="fas fa-times"></i></button>
-      <div class="auth-brand">ÉLORIA</div>
-      <section class="account-view" data-view="profile"><p class="section-eyebrow">YOUR ÉLORIA</p><h2>My Account</h2><div class="account-profile"></div></section>
-      <section class="account-view" data-view="orders" hidden><p class="section-eyebrow">YOUR JOURNEY</p><h2>My Orders</h2><div class="account-orders"></div></section>
-      <section class="account-view" data-view="wishlist" hidden><p class="section-eyebrow">SAVED FRAGRANCES</p><h2>Wishlist</h2><div class="account-wishlist"></div></section>
+    <div class="account-container">
+      <button class="modal-close account-close" aria-label="Close Account"><i class="fas fa-times"></i></button>
+      
+      <!-- Account Header -->
+      <div class="account-header">
+        <div class="account-brand">ÉLORIA</div>
+        <h1 class="account-welcome-title" id="account-welcome-heading">WELCOME BACK, <span id="account-user-name">PATRON</span></h1>
+        <p class="account-subheading">Your ÉLORIA fragrance journey.</p>
+      </div>
+
+      <!-- Account Summary Cards -->
+      <div class="account-summary-grid">
+        <div class="account-stat-card" data-action="filter-orders" data-status="all" role="button" tabindex="0">
+          <div class="stat-icon"><i class="fas fa-bag-shopping"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">TOTAL ORDERS</span>
+            <h4 class="stat-val" id="stat-total-orders">0</h4>
+          </div>
+        </div>
+        <div class="account-stat-card" data-action="filter-orders" data-status="delivered" role="button" tabindex="0">
+          <div class="stat-icon"><i class="fas fa-circle-check"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">COMPLETED ORDERS</span>
+            <h4 class="stat-val" id="stat-completed-orders">0</h4>
+          </div>
+        </div>
+        <div class="account-stat-card" data-action="filter-orders" data-status="active" role="button" tabindex="0">
+          <div class="stat-icon"><i class="fas fa-clock"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">PENDING ORDERS</span>
+            <h4 class="stat-val" id="stat-pending-orders">0</h4>
+          </div>
+        </div>
+        <div class="account-stat-card" data-action="view-wishlist" role="button" tabindex="0">
+          <div class="stat-icon"><i class="fas fa-heart"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">WISHLIST</span>
+            <h4 class="stat-val" id="stat-wishlist-count">0</h4>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Layout: Navigation & Content -->
+      <div class="account-body-layout">
+        <!-- Account Sidebar Navigation -->
+        <aside class="account-nav-sidebar">
+          <button class="account-nav-btn active" data-tab="profile">
+            <i class="fas fa-user-circle"></i>
+            <span>PROFILE</span>
+          </button>
+          <button class="account-nav-btn" data-tab="orders">
+            <i class="fas fa-box-open"></i>
+            <span>MY ORDERS</span>
+          </button>
+          <button class="account-nav-btn" data-tab="wishlist">
+            <i class="fas fa-heart"></i>
+            <span>WISHLIST</span>
+          </button>
+          <button class="account-nav-btn" data-tab="security">
+            <i class="fas fa-shield-alt"></i>
+            <span>PASSWORD &amp; SECURITY</span>
+          </button>
+          <button class="account-nav-btn account-logout-nav" id="account-logout-btn">
+            <i class="fas fa-arrow-right-from-bracket"></i>
+            <span>LOGOUT</span>
+          </button>
+        </aside>
+
+        <!-- Account Main Content Panels -->
+        <div class="account-main-content">
+          
+          <!-- TAB 1: PROFILE -->
+          <section class="account-tab-panel active" id="tab-profile">
+            <div class="panel-headline">
+              <div>
+                <h3>Personal Profile Information</h3>
+                <p class="panel-sub">Manage your personal atelier identity and contact details.</p>
+              </div>
+              <button class="btn btn-outline btn-sm" id="btn-toggle-edit-profile">
+                <i class="fas fa-edit"></i> Edit Profile
+              </button>
+            </div>
+
+            <!-- Profile View Details -->
+            <div id="profile-view-mode" class="profile-details-grid">
+              <div class="profile-field">
+                <label>First Name</label>
+                <p id="prof-display-firstname">--</p>
+              </div>
+              <div class="profile-field">
+                <label>Last Name</label>
+                <p id="prof-display-lastname">--</p>
+              </div>
+              <div class="profile-field">
+                <label>Email Address</label>
+                <p id="prof-display-email">--</p>
+                <small class="text-muted">Registered account email (Read-only)</small>
+              </div>
+              <div class="profile-field">
+                <label>Phone Number</label>
+                <p id="prof-display-phone">--</p>
+              </div>
+              <div class="profile-field full-width">
+                <label>Account Created Date</label>
+                <p id="prof-display-created">--</p>
+              </div>
+            </div>
+
+            <!-- Profile Edit Form (Initially Hidden) -->
+            <form id="profile-edit-form" class="profile-edit-form" hidden>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="edit-prof-firstname">First Name *</label>
+                  <input type="text" id="edit-prof-firstname" required minlength="2" placeholder="First Name">
+                </div>
+                <div class="form-group">
+                  <label for="edit-prof-lastname">Last Name *</label>
+                  <input type="text" id="edit-prof-lastname" required minlength="2" placeholder="Last Name">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="edit-prof-email">Email Address</label>
+                <input type="email" id="edit-prof-email" disabled readonly>
+              </div>
+              <div class="form-group">
+                <label for="edit-prof-phone">Phone Number</label>
+                <input type="tel" id="edit-prof-phone" pattern="[0-9]{10}" placeholder="10-digit phone number">
+              </div>
+              <div class="profile-form-actions">
+                <button type="button" class="btn btn-outline" id="btn-cancel-edit-profile">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-profile">Save Changes</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- TAB 2: MY ORDERS -->
+          <section class="account-tab-panel" id="tab-orders" hidden>
+            <div class="panel-headline">
+              <div>
+                <h3>My Orders &amp; Acquisition History</h3>
+                <p class="panel-sub">Track real-time shipment status and view complete invoices.</p>
+              </div>
+              <!-- Filter Tabs -->
+              <div class="order-filter-pills">
+                <button class="order-filter-btn active" data-filter="all">All</button>
+                <button class="order-filter-btn" data-filter="active">Active</button>
+                <button class="order-filter-btn" data-filter="delivered">Delivered</button>
+                <button class="order-filter-btn" data-filter="cancelled">Cancelled</button>
+              </div>
+            </div>
+
+            <!-- Orders Container -->
+            <div id="account-orders-container" class="account-orders-list">
+              <div class="account-loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading your orders...</p>
+              </div>
+            </div>
+
+            <!-- Orders Pagination -->
+            <div id="orders-pagination" class="orders-pagination" hidden></div>
+          </section>
+
+          <!-- TAB 3: WISHLIST -->
+          <section class="account-tab-panel" id="tab-wishlist" hidden>
+            <div class="panel-headline">
+              <div>
+                <h3>Saved Fragrance Collection</h3>
+                <p class="panel-sub">Your personal curations reserved for future acquisitions.</p>
+              </div>
+              <span id="wishlist-header-count" class="wishlist-badge">0 items</span>
+            </div>
+            <div id="account-wishlist-container" class="account-wishlist-grid">
+              <!-- Rendered via JS -->
+            </div>
+          </section>
+
+          <!-- TAB 4: PASSWORD & SECURITY -->
+          <section class="account-tab-panel" id="tab-security" hidden>
+            <div class="panel-headline">
+              <div>
+                <h3>Password &amp; Security</h3>
+                <p class="panel-sub">Ensure your ÉLORIA atelier credentials remain protected.</p>
+              </div>
+            </div>
+            <form id="change-password-form" class="security-form" autocomplete="off">
+              <div class="form-group">
+                <label for="pwd-current">Current Password *</label>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="pwd-current" required placeholder="Enter current password">
+                  <button type="button" class="pwd-toggle-btn" aria-label="Toggle password"><i class="fas fa-eye"></i></button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="pwd-new">New Password *</label>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="pwd-new" required minlength="8" placeholder="At least 8 chars, 1 uppercase, 1 lowercase, 1 number">
+                  <button type="button" class="pwd-toggle-btn" aria-label="Toggle password"><i class="fas fa-eye"></i></button>
+                </div>
+                <small class="pwd-hint">Minimum 8 characters with at least 1 uppercase letter, 1 lowercase letter, and 1 number.</small>
+              </div>
+              <div class="form-group">
+                <label for="pwd-confirm">Confirm New Password *</label>
+                <div class="pwd-input-wrap">
+                  <input type="password" id="pwd-confirm" required minlength="8" placeholder="Repeat new password">
+                  <button type="button" class="pwd-toggle-btn" aria-label="Toggle password"><i class="fas fa-eye"></i></button>
+                </div>
+              </div>
+              <div id="password-feedback-msg" class="password-feedback" hidden></div>
+              <button type="submit" class="btn btn-primary" id="btn-update-pwd">
+                <span>UPDATE PASSWORD</span>
+              </button>
+            </form>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ÉLORIA CLIENT ORDER DETAILS MODAL -->
+  <!-- ========================================== -->
+  <div class="order-details-modal" id="client-order-modal" aria-hidden="true">
+    <div class="modal-overlay order-modal-overlay"></div>
+    <div class="order-modal-container">
+      <button class="modal-close order-modal-close" aria-label="Close details"><i class="fas fa-times"></i></button>
+      
+      <div class="order-modal-header">
+        <div class="order-modal-brand">ÉLORIA ORDER DOSSIER</div>
+        <h2 id="modal-client-order-number">Order: ELR-2026-000000</h2>
+        <div class="order-modal-meta">
+          <span id="modal-client-order-date">Date</span>
+          <span class="meta-dot">&bull;</span>
+          <span id="modal-client-order-status-badge" class="badge">Status</span>
+          <span class="meta-dot">&bull;</span>
+          <span id="modal-client-payment-badge" class="badge">Payment</span>
+        </div>
+      </div>
+
+      <!-- Visual Order Timeline -->
+      <div class="order-timeline-container" id="order-timeline-wrapper">
+        <!-- Rendered dynamically via JS -->
+      </div>
+
+      <!-- Body Content -->
+      <div class="order-modal-body" id="modal-client-order-body">
+        <!-- Products, Pricing, Shipping, Payment details -->
+      </div>
+
+      <!-- Footer Action -->
+      <div class="order-modal-footer" id="modal-client-order-footer">
+        <!-- Reorder button rendered via JS -->
+      </div>
     </div>
   </div>
 

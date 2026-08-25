@@ -12,6 +12,11 @@ const productSchema = new mongoose.Schema({
     unique: true,
     lowercase: true
   },
+  sku: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   description: {
     type: String,
     required: true
@@ -94,5 +99,9 @@ const productSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+productSchema.index({ category: 1 });
+productSchema.index({ stock: 1 });
+productSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Product', productSchema);

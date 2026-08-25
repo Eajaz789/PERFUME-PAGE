@@ -12,10 +12,41 @@ const subscriberRoutes = require('./routes/subscriberRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const couponRoutes = require('./routes/couponRoutes');
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const User = require('./models/User');
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
+
+// Helper to ensure default admin user exists
+async function ensureAdminUser() {
+  try {
+    const adminExists = await User.findOne({ role: 'admin' });
+    if (!adminExists) {
+      const existingUser = await User.findOne({ email: 'admin@eloria.com' });
+      if (existingUser) {
+        existingUser.role = 'admin';
+        await existingUser.save();
+        console.log('Default admin role granted to admin@eloria.com');
+      } else {
+        await User.create({
+          firstName: 'Éloria',
+          lastName: 'Admin',
+          email: 'admin@eloria.com',
+          phone: '9876543210',
+          password: 'AdminPassword123',
+          role: 'admin',
+          isVerified: true
+        });
+        console.log('Default admin user created: admin@eloria.com / AdminPassword123');
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring admin user:', err.message);
+  }
+}
 
 // Middleware
 app.use(helmet({
@@ -32,7 +63,10 @@ app.use(express.static('public'));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('ÉLORIA database connected'))
+  .then(async () => {
+    console.log('ÉLORIA database connected');
+    await ensureAdminUser();
+  })
   .catch((err) => {
     console.error('MongoDB connection error:', err);
     process.exit(1);
@@ -52,6 +86,13 @@ app.use('/api/subscribers', subscriberRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Admin portal route
+app.get(['/admin', '/admin/*'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // Serve HTML for all other routes
 app.get('*', (req, res) => {

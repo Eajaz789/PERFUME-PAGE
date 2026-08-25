@@ -9,16 +9,14 @@ const TAX_RATE = 0.18;
 const FREE_SHIPPING_LIMIT = 5000;
 const SHIPPING_CHARGE = 199;
 
+
+
 // @desc    Create new order
 // @route   POST /api/orders
 // @access  Private
 exports.createOrder = async (req, res) => {
-  const session = {
-    abortTransaction: async () => {},
-    commitTransaction: async () => {},
-    endSession: () => {}
-  };
-  const abortOrder = async () => {};
+  const session = await mongoose.startSession();
+  session.startTransaction();
   const finishOrder = async () => {};
   const applySession = query => query;
   const sessionOptions = {};
@@ -251,15 +249,23 @@ exports.createOrder = async (req, res) => {
 
 // @desc    Get order by ID
 // @route   GET /api/orders/:id
-// @access  Public
+// @access  Private
 exports.getOrderById = async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
+    const order = await Order.findById(req.params.id);
     
     if (!order) {
       return res.status(404).json({
         success: false,
         message: 'Order not found'
+      });
+    }
+
+    // Strict ownership verification: order must belong to user or user must be admin
+    if (order.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: You are not authorized to view this order.'
       });
     }
     
@@ -275,11 +281,54 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
+// @desc    Get current user's orders with status filtering & summary counts
+// @route   GET /api/orders/my-orders
+// @access  Private
 exports.getMyOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, data: orders });
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const { status } = req.query;
+    const query = { user: req.user._id };
+
+    if (status && status !== 'all') {
+      if (status === 'active') {
+        query.orderStatus = { $in: ['pending', 'confirmed', 'processing', 'shipped'] };
+      } else if (status === 'delivered') {
+        query.orderStatus = 'delivered';
+      } else if (status === 'cancelled') {
+        query.orderStatus = 'cancelled';
+      }
+    }
+
+    const [orders, total, totalOrders, completedOrders, pendingOrders] = await Promise.all([
+      Order.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Order.countDocuments(query),
+      Order.countDocuments({ user: req.user._id }),
+      Order.countDocuments({ user: req.user._id, orderStatus: 'delivered' }),
+      Order.countDocuments({ user: req.user._id, orderStatus: { $in: ['pending', 'confirmed', 'processing', 'shipped'] } })
+    ]);
+
+    res.json({
+      success: true,
+      data: orders,
+      stats: {
+        totalOrders,
+        completedOrders,
+        pendingOrders
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
+    });
   } catch (error) {
+    console.error('Get my orders error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch orders' });
   }
 };
+

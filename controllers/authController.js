@@ -6,10 +6,11 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 const safeUser = (user) => ({
   id: user._id,
-  firstName: user.firstName,
-  lastName: user.lastName,
+  firstName: user.firstName || user.name?.split(' ')[0] || 'User',
+  lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
   email: user.email,
-  phone: user.phone || ''
+  phone: user.phone || '',
+  role: user.role || 'customer'
 });
 
 const setAuthCookie = (res, token) => res.cookie('token', token, {
@@ -130,10 +131,13 @@ exports.login = async (req, res) => {
     // Set HTTP-only cookie
     setAuthCookie(res, token);
     
+    const userData = safeUser(user);
+    console.log('Login returning user data:', userData);
+    
     res.json({
       success: true,
       message: 'Welcome back to ÉLORIA',
-      user: safeUser(user)
+      user: userData
     });
   } catch (error) {
     res.status(500).json({
@@ -172,7 +176,9 @@ exports.logout = async (req, res) => {
 // @access  Public
 exports.getMe = async (req, res) => {
   try {
+    console.log('getMe called, cookies:', req.cookies);
     const token = req.cookies?.token;
+    console.log('Token from cookie:', token);
     
     if (!token) {
       return res.json({
@@ -183,13 +189,17 @@ exports.getMe = async (req, res) => {
     }
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'eloria_secret_key_2024');
+    console.log('Decoded token:', decoded);
     const user = await User.findById(decoded.id).select('-password');
+    console.log('User from DB:', user);
     
     if (user) {
+      const userData = safeUser(user);
+      console.log('Returning user data:', userData);
       res.json({
         success: true,
         authenticated: true,
-        user: safeUser(user)
+        user: userData
       });
     } else {
       res.json({
@@ -199,6 +209,7 @@ exports.getMe = async (req, res) => {
       });
     }
   } catch (error) {
+    console.error('getMe error:', error);
     res.json({
       success: true,
       authenticated: false,

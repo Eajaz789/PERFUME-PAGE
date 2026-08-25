@@ -20,10 +20,17 @@ const contactSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  isRead: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
+
+contactSchema.index({ createdAt: -1 });
+contactSchema.index({ isRead: 1 });
 
 module.exports = mongoose.model('Contact', contactSchema);

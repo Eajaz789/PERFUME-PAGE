@@ -7,6 +7,7 @@ const products = [
   {
     name: 'ÉLORIA NOIR',
     slug: 'eloria-noir',
+    sku: 'ELR-NOIR-001',
     description: 'Dark. Magnetic. Unforgettable. A sophisticated woody fragrance that commands attention with its deep, mysterious character. Crafted around rare oud, precious saffron and rich leather notes.',
     shortDescription: 'Dark. Magnetic. Unforgettable.',
     price: 8900,
@@ -28,6 +29,7 @@ const products = [
   {
     name: 'ÉLORIA ROSE',
     slug: 'eloria-rose',
+    sku: 'ELR-ROSE-001',
     description: 'Elegant. Soft. Expressive. A timeless floral composition that celebrates the queen of flowers in her most graceful form. Modern yet timeless.',
     shortDescription: 'Elegant. Soft. Expressive.',
     price: 7500,
@@ -49,6 +51,7 @@ const products = [
   {
     name: 'ÉLORIA VERT',
     slug: 'eloria-vert',
+    sku: 'ELR-VERT-001',
     description: 'Clean. Vibrant. Effortless. A fresh green fragrance that captures the essence of nature in its purest, most revitalizing form. Perfect for everyday elegance.',
     shortDescription: 'Clean. Vibrant. Effortless.',
     price: 6900,
@@ -70,6 +73,7 @@ const products = [
   {
     name: 'ÉLORIA OUD',
     slug: 'eloria-oud',
+    sku: 'ELR-OUD-001',
     description: 'Rare. Precious. Timeless. An opulent oud fragrance that speaks of ancient traditions and modern luxury. The crown jewel of our collection.',
     shortDescription: 'Rare. Precious. Timeless.',
     price: 11900,
@@ -91,6 +95,7 @@ const products = [
   {
     name: 'ÉLORIA AMBRE',
     slug: 'eloria-ambre',
+    sku: 'ELR-AMBRE-001',
     description: 'Warm. Sensual. Enveloping. A rich amber fragrance that wraps you in comfort and sophistication. Perfect for evening elegance.',
     shortDescription: 'Warm. Sensual. Enveloping.',
     price: 8500,
@@ -112,6 +117,7 @@ const products = [
   {
     name: 'ÉLORIA BLANC',
     slug: 'eloria-blanc',
+    sku: 'ELR-BLANC-001',
     description: 'Pure. Serene. Radiant. A luminous white floral fragrance that evokes the tranquility of a perfect morning. Clean and sophisticated.',
     shortDescription: 'Pure. Serene. Radiant.',
     price: 7200,

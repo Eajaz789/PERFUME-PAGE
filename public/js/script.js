@@ -221,11 +221,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const discoveryProducts = document.getElementById('discovery-products');
 
     try {
-      const response = await fetch('/api/products');
+      const response = await fetch('http://localhost:5001/api/products');
       if (!response.ok) throw new Error('Failed to fetch products');
       
       const result = await response.json();
       const products = result.success ? result.data : [];
+      
+      // Store products globally
+      window.allProducts = products;
       
       // Render featured collection
       renderProducts(products, productsGrid);
@@ -338,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function checkAuthentication() {
     try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
+      const response = await fetch('http://localhost:5001/api/auth/me', { credentials: 'include' });
       return await response.json();
     } catch (error) {
       return { authenticated: false, user: null };
@@ -347,7 +350,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateAuthUI() {
     const label = document.querySelector('.account-label');
-    if (label) label.textContent = currentUser ? `Hi, ${currentUser.firstName}` : 'SIGN IN';
+    const adminLink = document.querySelector('.admin-portal-link');
+    if (adminLink) {
+      adminLink.style.display = (currentUser && currentUser.role === 'admin') ? 'block' : 'none';
+    }
+    if (label) {
+      if (currentUser && currentUser.firstName) {
+        label.textContent = `Hi, ${currentUser.firstName}`;
+      } else {
+        label.textContent = 'SIGN IN';
+      }
+    }
   }
 
   function savePendingCartAction(productId, quantity = 1) {
@@ -916,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { subtotal } = calculateCartTotals();
     
     try {
-      const response = await fetch('/api/coupons/validate', {
+      const response = await fetch('http://localhost:5001/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, orderValue: subtotal })
@@ -1012,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     
     try {
-      const response = await fetch('/api/orders', {
+      const response = await fetch('http://localhost:5001/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1365,7 +1378,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       searchResults.innerHTML = '<div class="loading-state">Searching...</div>';
       
-      const response = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
+      const response = await fetch(`http://localhost:5001/api/products?search=${encodeURIComponent(query)}`);
       const result = await response.json();
       const products = result.success ? result.data : [];
       
@@ -1491,7 +1504,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function submitAuthForm(form, endpoint, successMessage) {
     const formData = Object.fromEntries(new FormData(form));
     if (endpoint === 'reset-password') formData.token = localStorage.getItem('eloriaResetToken') || '';
-    const response = await fetch(`/api/auth/${endpoint}`, {
+    const response = await fetch(`http://localhost:5001/api/auth/${endpoint}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify(formData)
     });
@@ -1504,7 +1517,12 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     try {
       const result = await submitAuthForm(event.target, 'login', 'Welcome back to ÉLORIA.');
-      currentUser = result.user; updateAuthUI(); closeAuthModal(); showToast('Welcome back to ÉLORIA.', 'success');
+      console.log('Login result:', result);
+      console.log('Login result.user:', result.user);
+      currentUser = result.user; 
+      updateAuthUI(); 
+      closeAuthModal(); 
+      showToast('Welcome back to ÉLORIA.', 'success');
       await resumePendingCartAction();
       if (authReturnTo === '#checkout' && cart.length) openCheckoutModal();
     } catch (error) { showToast(error.message, 'error'); }
@@ -1540,7 +1558,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.querySelector('.logout-button')?.addEventListener('click', async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch('http://localhost:5001/api/auth/logout', { method: 'POST', credentials: 'include' });
     currentUser = null; updateAuthUI(); document.querySelector('.account-menu').hidden = true; showToast('You have been signed out.', 'success');
   });
 
@@ -1570,9 +1588,65 @@ document.addEventListener('DOMContentLoaded', () => {
       const ordersPanel = document.querySelector('.account-orders');
       ordersPanel.textContent = 'Loading orders...';
       try {
-        const response = await fetch('/api/orders/my-orders', { credentials: 'include' });
+        const response = await fetch('http://localhost:5001/api/orders/my-orders', { credentials: 'include' });
         const result = await response.json();
-        ordersPanel.innerHTML = result.data?.length ? result.data.map(order => `<div class="account-order"><strong>${order.orderNumber}</strong><span>₹${order.total.toLocaleString()} · ${order.orderStatus}</span></div>`).join('') : '<p class="account-muted">No orders yet.</p>';
+        
+        if (result.data?.length) {
+          ordersPanel.innerHTML = result.data.map(order => {
+            const statusIcons = {
+              pending: 'fa-clock', confirmed: 'fa-check-circle', processing: 'fa-cog',
+              shipped: 'fa-shipping-fast', delivered: 'fa-box-open', cancelled: 'fa-times-circle'
+            };
+            const statusIcon = statusIcons[order.orderStatus?.toLowerCase()] || 'fa-circle';
+            const paymentLabels = { cod: 'Cash on Delivery', upi: 'UPI Payment', card: 'Card Payment' };
+            const addr = order.shippingAddress || {};
+            return `
+            <div class="account-order-card">
+              <div class="order-header">
+                <div class="order-number"><strong>${order.orderNumber}</strong></div>
+                <div class="order-date">${new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                <div class="order-status ${order.orderStatus?.toLowerCase().replace(' ', '-')}"><i class="fas ${statusIcon}"></i> ${order.orderStatus}</div>
+              </div>
+              <div class="order-items">
+                ${order.items.map(item => `
+                  <div class="order-item">
+                    <img class="order-item-img" src="${item.image || '/images/placeholder.jpg'}" alt="${item.name}" />
+                    <div class="order-item-info">
+                      <span class="item-name">${item.name}</span>
+                      <span class="item-qty-price">Qty: ${item.quantity} × ₹${item.price.toLocaleString()}</span>
+                    </div>
+                    <span class="item-price">₹${(item.price * item.quantity).toLocaleString()}</span>
+                  </div>
+                `).join('')}
+              </div>
+              <div class="order-summary-grid">
+                <div class="order-summary-row"><span>Subtotal</span><span>₹${order.subtotal.toLocaleString()}</span></div>
+                ${order.discount ? `<div class="order-summary-row discount"><span>Discount${order.coupon?.code ? ` (${order.coupon.code})` : ''}</span><span>−₹${order.discount.toLocaleString()}</span></div>` : ''}
+                <div class="order-summary-row"><span>Tax (GST)</span><span>₹${order.tax.toLocaleString()}</span></div>
+                <div class="order-summary-row"><span>Shipping</span><span>${order.shipping === 0 ? 'Free' : '₹' + order.shipping.toLocaleString()}</span></div>
+              </div>
+              <div class="order-footer">
+                <div class="order-footer-left">
+                  <span class="order-payment"><i class="fas ${order.paymentMethod === 'cod' ? 'fa-money-bill-wave' : order.paymentMethod === 'upi' ? 'fa-mobile-alt' : 'fa-credit-card'}"></i> ${paymentLabels[order.paymentMethod] || order.paymentMethod}</span>
+                  <span class="order-payment-status ${order.paymentStatus}">${order.paymentStatus}</span>
+                </div>
+                <div class="order-total"><strong>Total: ₹${order.total.toLocaleString()}</strong></div>
+              </div>
+              <details class="order-shipping-details">
+                <summary>Shipping Details</summary>
+                <div class="order-address">
+                  <p><strong>${order.customer?.name || ''}</strong></p>
+                  <p>${addr.address || ''}${addr.landmark ? ', ' + addr.landmark : ''}</p>
+                  <p>${addr.city || ''}, ${addr.state || ''} — ${addr.pincode || ''}</p>
+                  <p>${addr.country || 'India'}</p>
+                  ${order.customer?.phone ? `<p><i class="fas fa-phone"></i> ${order.customer.phone}</p>` : ''}
+                </div>
+              </details>
+            </div>
+          `}).join('');
+        } else {
+          ordersPanel.innerHTML = '<p class="account-muted">No orders yet.</p>';
+        }
       } catch (error) { ordersPanel.textContent = 'Unable to load orders. Please try again.'; }
     }
     if (view === 'wishlist') {
@@ -1622,7 +1696,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const email = newsletterForm.querySelector('input[type="email"]').value;
     
     try {
-      const response = await fetch('/api/subscribers', {
+      const response = await fetch('http://localhost:5001/api/subscribers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -1660,7 +1734,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       
       try {
-        const response = await fetch('/api/contact', {
+        const response = await fetch('http://localhost:5001/api/contact', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(contactData)
@@ -1719,8 +1793,15 @@ document.addEventListener('DOMContentLoaded', () => {
   updateCartUI();
   updateWishlistUI();
   observeScrollAnimations();
+  
+  // Check authentication on page load
   checkAuthentication().then(auth => {
-    if (auth.authenticated) { currentUser = auth.user; updateAuthUI(); }
+    console.log('Auth check on load:', auth);
+    if (auth.authenticated && auth.user) {
+      currentUser = auth.user;
+      console.log('Current user set:', currentUser);
+      updateAuthUI();
+    }
   });
 });
 
