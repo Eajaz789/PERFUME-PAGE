@@ -53,7 +53,21 @@ app.use(helmet({
   contentSecurityPolicy: false // Disable CSP for development
 }));
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || `http://localhost:${PORT}`,
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    const allowed = [
+      process.env.CLIENT_ORIGIN,
+      'https://perfume-page-s1q6.vercel.app',
+      'http://localhost:5001',
+      'http://localhost:5000',
+      'http://localhost:3000'
+    ].filter(Boolean);
+    if (allowed.some(o => origin.startsWith(o)) || origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Allow all for now (restrict later)
+  },
   credentials: true
 }));
 app.use(cookieParser());
@@ -103,6 +117,11 @@ app.get('*', (req, res) => {
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`ÉLORIA server running on port ${PORT}`);
-});
+module.exports = app;
+
+// Only listen when not running on Vercel (Vercel manages its own server)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`ÉLORIA server running on port ${PORT}`);
+  });
+}

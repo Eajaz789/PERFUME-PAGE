@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const discoveryProducts = document.getElementById('discovery-products');
 
     try {
-      const response = await fetch('http://localhost:5001/api/products');
+      const response = await fetch('/api/products');
       if (!response.ok) throw new Error('Failed to fetch products');
       
       const result = await response.json();
@@ -274,35 +274,37 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `).join('');
 
-    // Re-attach event listeners
-    attachProductEventListeners();
-    attachWishlistListeners();
+    // Re-attach event listeners — scoped to this container only
+    attachProductEventListeners(container);
+    attachWishlistListeners(container);
     
     // Trigger scroll animations
     observeScrollAnimations();
   }
 
-  function attachProductEventListeners() {
-    // Add to cart buttons
-    document.querySelectorAll('.add-to-cart').forEach(btn => {
+  function attachProductEventListeners(container) {
+    const scope = container || document;
+    // Add to cart buttons — scoped to container to avoid duplicate listeners
+    scope.querySelectorAll('.add-to-cart').forEach(btn => {
       btn.addEventListener('click', (e) => {
         if (btn.disabled) return;
-        const productId = e.target.dataset.id;
+        const productId = btn.dataset.id;
         addToCart(productId);
       });
     });
 
     // View details buttons
-    document.querySelectorAll('.view-details').forEach(btn => {
+    scope.querySelectorAll('.view-details').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const productId = e.target.dataset.id;
+        const productId = btn.dataset.id;
         openProductModal(productId);
       });
     });
   }
 
-  function attachWishlistListeners() {
-    document.querySelectorAll('.wishlist-btn').forEach(btn => {
+  function attachWishlistListeners(container) {
+    const scope = container || document;
+    scope.querySelectorAll('.wishlist-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const productId = e.currentTarget.dataset.id;
         toggleWishlist(productId, e.currentTarget);
@@ -341,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function checkAuthentication() {
     try {
-      const response = await fetch('http://localhost:5001/api/auth/me', { credentials: 'include' });
+      const response = await fetch('/api/auth/me', { credentials: 'include' });
       return await response.json();
     } catch (error) {
       return { authenticated: false, user: null };
@@ -929,7 +931,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { subtotal } = calculateCartTotals();
     
     try {
-      const response = await fetch('http://localhost:5001/api/coupons/validate', {
+      const response = await fetch('/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, orderValue: subtotal })
@@ -1025,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     
     try {
-      const response = await fetch('http://localhost:5001/api/orders', {
+      const response = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1378,7 +1380,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       searchResults.innerHTML = '<div class="loading-state">Searching...</div>';
       
-      const response = await fetch(`http://localhost:5001/api/products?search=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
       const result = await response.json();
       const products = result.success ? result.data : [];
       
@@ -1504,7 +1506,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function submitAuthForm(form, endpoint, successMessage) {
     const formData = Object.fromEntries(new FormData(form));
     if (endpoint === 'reset-password') formData.token = localStorage.getItem('eloriaResetToken') || '';
-    const response = await fetch(`http://localhost:5001/api/auth/${endpoint}`, {
+    const response = await fetch(`/api/auth/${endpoint}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify(formData)
     });
@@ -1524,7 +1526,11 @@ document.addEventListener('DOMContentLoaded', () => {
       closeAuthModal(); 
       showToast('Welcome back to ÉLORIA.', 'success');
       await resumePendingCartAction();
-      if (authReturnTo === '#checkout' && cart.length) openCheckoutModal();
+      if (authReturnTo === '#checkout' && cart.length) {
+        openCheckoutModal();
+      } else if (authReturnTo === '#account') {
+        showAccountView('profile');
+      }
     } catch (error) { showToast(error.message, 'error'); }
   });
 
@@ -1557,108 +1563,774 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) { showToast(error.message, 'error'); }
   });
 
-  document.querySelector('.logout-button')?.addEventListener('click', async () => {
-    await fetch('http://localhost:5001/api/auth/logout', { method: 'POST', credentials: 'include' });
-    currentUser = null; updateAuthUI(); document.querySelector('.account-menu').hidden = true; showToast('You have been signed out.', 'success');
+  document.getElementById('reset-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      await submitAuthForm(event.target, 'reset-password', '');
+      localStorage.removeItem('eloriaResetToken'); openAuthPanel('login'); showToast('Password updated successfully. Please sign in again.', 'success');
+    } catch (error) { showToast(error.message, 'error'); }
   });
 
-  const accountModal = document.querySelector('.account-modal');
+  // Account Portal State Variables
+  let currentAccountTab = 'profile';
+  let currentOrderFilter = 'all';
+  let currentOrderPage = 1;
+
+  // Account Logout Handler
+  document.getElementById('account-logout-btn')?.addEventListener('click', handleLogout);
+  document.querySelector('.logout-button')?.addEventListener('click', handleLogout);
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      currentUser = null;
+      updateAuthUI();
+      document.querySelector('.account-menu').hidden = true;
+      closeAccountModal();
+      showToast('You have been signed out.', 'success');
+      // Redirect to homepage/reload if required
+      window.location.hash = '';
+    } catch (error) {
+      showToast('Failed to sign out. Please try again.', 'error');
+    }
+  }
+
+  const accountModal = document.getElementById('account-modal');
+  
   function closeAccountModal() {
+    if (!accountModal) return;
     accountModal.classList.remove('open');
     accountModal.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
   }
 
-  function openAccountView(view) {
-    document.querySelectorAll('.account-view').forEach(panel => { panel.hidden = panel.dataset.view !== view; });
+  function openAccountView() {
+    if (!accountModal) return;
     accountModal.classList.add('open');
     accountModal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
   }
 
-  async function showAccountView(view) {
+  // Show account tab and fetch relevant data
+  async function showAccountView(tab) {
     if (!(await requireAuthentication('#account'))) return;
     document.querySelector('.account-menu').hidden = true;
-    openAccountView(view);
-    if (view === 'profile') {
-      const profile = document.querySelector('.account-profile');
-      profile.innerHTML = `<div class="detail-item"><span>First Name</span><span>${currentUser.firstName}</span></div><div class="detail-item"><span>Last Name</span><span>${currentUser.lastName}</span></div><div class="detail-item"><span>Email</span><span>${currentUser.email}</span></div><div class="detail-item"><span>Phone</span><span>${currentUser.phone || 'Not provided'}</span></div>`;
+    
+    currentAccountTab = tab || 'profile';
+    openAccountView();
+
+    // Set Welcome Header
+    const welcomeHeading = document.getElementById('account-welcome-heading');
+    if (welcomeHeading && currentUser) {
+      welcomeHeading.innerHTML = `WELCOME BACK, <span id="account-user-name">${currentUser.firstName.toUpperCase()}</span>`;
     }
-    if (view === 'orders') {
-      const ordersPanel = document.querySelector('.account-orders');
-      ordersPanel.textContent = 'Loading orders...';
-      try {
-        const response = await fetch('http://localhost:5001/api/orders/my-orders', { credentials: 'include' });
-        const result = await response.json();
-        
-        if (result.data?.length) {
-          ordersPanel.innerHTML = result.data.map(order => {
-            const statusIcons = {
-              pending: 'fa-clock', confirmed: 'fa-check-circle', processing: 'fa-cog',
-              shipped: 'fa-shipping-fast', delivered: 'fa-box-open', cancelled: 'fa-times-circle'
-            };
-            const statusIcon = statusIcons[order.orderStatus?.toLowerCase()] || 'fa-circle';
-            const paymentLabels = { cod: 'Cash on Delivery', upi: 'UPI Payment', card: 'Card Payment' };
-            const addr = order.shippingAddress || {};
-            return `
-            <div class="account-order-card">
-              <div class="order-header">
-                <div class="order-number"><strong>${order.orderNumber}</strong></div>
-                <div class="order-date">${new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                <div class="order-status ${order.orderStatus?.toLowerCase().replace(' ', '-')}"><i class="fas ${statusIcon}"></i> ${order.orderStatus}</div>
-              </div>
-              <div class="order-items">
-                ${order.items.map(item => `
-                  <div class="order-item">
-                    <img class="order-item-img" src="${item.image || '/images/placeholder.jpg'}" alt="${item.name}" />
-                    <div class="order-item-info">
-                      <span class="item-name">${item.name}</span>
-                      <span class="item-qty-price">Qty: ${item.quantity} × ₹${item.price.toLocaleString()}</span>
-                    </div>
-                    <span class="item-price">₹${(item.price * item.quantity).toLocaleString()}</span>
-                  </div>
-                `).join('')}
-              </div>
-              <div class="order-summary-grid">
-                <div class="order-summary-row"><span>Subtotal</span><span>₹${order.subtotal.toLocaleString()}</span></div>
-                ${order.discount ? `<div class="order-summary-row discount"><span>Discount${order.coupon?.code ? ` (${order.coupon.code})` : ''}</span><span>−₹${order.discount.toLocaleString()}</span></div>` : ''}
-                <div class="order-summary-row"><span>Tax (GST)</span><span>₹${order.tax.toLocaleString()}</span></div>
-                <div class="order-summary-row"><span>Shipping</span><span>${order.shipping === 0 ? 'Free' : '₹' + order.shipping.toLocaleString()}</span></div>
-              </div>
-              <div class="order-footer">
-                <div class="order-footer-left">
-                  <span class="order-payment"><i class="fas ${order.paymentMethod === 'cod' ? 'fa-money-bill-wave' : order.paymentMethod === 'upi' ? 'fa-mobile-alt' : 'fa-credit-card'}"></i> ${paymentLabels[order.paymentMethod] || order.paymentMethod}</span>
-                  <span class="order-payment-status ${order.paymentStatus}">${order.paymentStatus}</span>
-                </div>
-                <div class="order-total"><strong>Total: ₹${order.total.toLocaleString()}</strong></div>
-              </div>
-              <details class="order-shipping-details">
-                <summary>Shipping Details</summary>
-                <div class="order-address">
-                  <p><strong>${order.customer?.name || ''}</strong></p>
-                  <p>${addr.address || ''}${addr.landmark ? ', ' + addr.landmark : ''}</p>
-                  <p>${addr.city || ''}, ${addr.state || ''} — ${addr.pincode || ''}</p>
-                  <p>${addr.country || 'India'}</p>
-                  ${order.customer?.phone ? `<p><i class="fas fa-phone"></i> ${order.customer.phone}</p>` : ''}
-                </div>
-              </details>
-            </div>
-          `}).join('');
-        } else {
-          ordersPanel.innerHTML = '<p class="account-muted">No orders yet.</p>';
-        }
-      } catch (error) { ordersPanel.textContent = 'Unable to load orders. Please try again.'; }
+
+    // Toggle active classes on Nav Sidebar
+    document.querySelectorAll('.account-nav-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === currentAccountTab);
+    });
+
+    // Toggle Tab Panels
+    document.querySelectorAll('.account-tab-panel').forEach(panel => {
+      panel.hidden = panel.id !== `tab-${currentAccountTab}`;
+      panel.classList.toggle('active', panel.id === `tab-${currentAccountTab}`);
+    });
+
+    // Load Tab specific data
+    if (currentAccountTab === 'profile') {
+      await loadUserProfile();
+    } else if (currentAccountTab === 'orders') {
+      await loadMyOrders(currentOrderFilter, currentOrderPage);
+    } else if (currentAccountTab === 'wishlist') {
+      await loadWishlistInAccount();
+    } else if (currentAccountTab === 'security') {
+      resetPasswordForm();
     }
-    if (view === 'wishlist') {
-      if (!allProducts.length) allProducts = await loadProducts();
-      const saved = allProducts.filter(product => wishlist.includes(product._id));
-      document.querySelector('.account-wishlist').innerHTML = saved.length ? saved.map(product => `<div class="account-order"><strong>${product.name}</strong><span>₹${product.price.toLocaleString()}</span></div>`).join('') : '<p class="account-muted">Your wishlist is empty.</p>';
+
+    // Refresh general counts for summary cards
+    await refreshAccountSummaryStats();
+  }
+
+  // Refresh Summary Cards
+  async function refreshAccountSummaryStats() {
+    try {
+      const res = await fetch('/api/orders/my-orders?limit=1', { credentials: 'include' });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        document.getElementById('stat-total-orders').textContent = result.stats?.totalOrders || 0;
+        document.getElementById('stat-completed-orders').textContent = result.stats?.completedOrders || 0;
+        document.getElementById('stat-pending-orders').textContent = result.stats?.pendingOrders || 0;
+      }
+    } catch (err) {
+      console.error('Error fetching summary order stats:', err);
+    }
+    
+    // Update Wishlist Count
+    document.getElementById('stat-wishlist-count').textContent = wishlist.length || 0;
+  }
+
+  // Profile management
+  async function loadUserProfile() {
+    try {
+      const res = await fetch('/api/users/profile', { credentials: 'include' });
+      const result = await res.json();
+      
+      if (res.ok && result.success) {
+        const u = result.data;
+        // Populate display view
+        document.getElementById('prof-display-firstname').textContent = u.firstName || 'Not provided';
+        document.getElementById('prof-display-lastname').textContent = u.lastName || 'Not provided';
+        document.getElementById('prof-display-email').textContent = u.email;
+        document.getElementById('prof-display-phone').textContent = u.phone || 'Not provided';
+        document.getElementById('prof-display-created').textContent = new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        // Populate edit form
+        document.getElementById('edit-prof-firstname').value = u.firstName || '';
+        document.getElementById('edit-prof-lastname').value = u.lastName || '';
+        document.getElementById('edit-prof-email').value = u.email;
+        document.getElementById('edit-prof-phone').value = u.phone || '';
+      } else {
+        showToast(result.message || 'Unable to retrieve profile data.', 'error');
+      }
+    } catch (err) {
+      showToast('Connection error. Failed to retrieve profile.', 'error');
     }
   }
 
-  document.querySelectorAll('.account-view-link').forEach(link => link.addEventListener('click', () => showAccountView(link.dataset.view)));
+  // Toggle Edit Profile View
+  const toggleEditProfileBtn = document.getElementById('btn-toggle-edit-profile');
+  const cancelEditProfileBtn = document.getElementById('btn-cancel-edit-profile');
+  const profileViewMode = document.getElementById('profile-view-mode');
+  const profileEditForm = document.getElementById('profile-edit-form');
+
+  toggleEditProfileBtn?.addEventListener('click', () => {
+    profileViewMode.hidden = true;
+    profileEditForm.hidden = false;
+    toggleEditProfileBtn.style.display = 'none';
+  });
+
+  cancelEditProfileBtn?.addEventListener('click', () => {
+    profileViewMode.hidden = false;
+    profileEditForm.hidden = true;
+    toggleEditProfileBtn.style.display = 'inline-flex';
+  });
+
+  profileEditForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const firstName = document.getElementById('edit-prof-firstname').value.trim();
+    const lastName = document.getElementById('edit-prof-lastname').value.trim();
+    const phone = document.getElementById('edit-prof-phone').value.trim();
+
+    try {
+      const res = await fetch('/api/users/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ firstName, lastName, phone })
+      });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        showToast('Profile information updated successfully.', 'success');
+        currentUser.firstName = firstName;
+        currentUser.lastName = lastName;
+        currentUser.phone = phone;
+        updateAuthUI();
+
+        // Refresh views
+        profileViewMode.hidden = false;
+        profileEditForm.hidden = true;
+        toggleEditProfileBtn.style.display = 'inline-flex';
+        await loadUserProfile();
+      } else {
+        showToast(result.message || 'Failed to update profile.', 'error');
+      }
+    } catch (err) {
+      showToast('Error saving profile changes.', 'error');
+    }
+  });
+
+  // Password & Security Management
+  const changePasswordForm = document.getElementById('change-password-form');
+  const passwordFeedback = document.getElementById('password-feedback-msg');
+
+  function resetPasswordForm() {
+    if (changePasswordForm) {
+      changePasswordForm.reset();
+    }
+    if (passwordFeedback) {
+      passwordFeedback.hidden = true;
+      passwordFeedback.className = 'password-feedback';
+      passwordFeedback.textContent = '';
+    }
+  }
+
+  changePasswordForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const currentPassword = document.getElementById('pwd-current').value;
+    const newPassword = document.getElementById('pwd-new').value;
+    const confirmPassword = document.getElementById('pwd-confirm').value;
+
+    if (passwordFeedback) {
+      passwordFeedback.hidden = true;
+      passwordFeedback.textContent = '';
+    }
+
+    if (newPassword !== confirmPassword) {
+      showFeedback('Passwords do not match.', 'error');
+      return;
+    }
+
+    // Password validation pattern (min 8 chars, 1 uppercase, 1 lowercase, 1 digit)
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(newPassword)) {
+      showFeedback('Password must be at least 8 characters, and include uppercase, lowercase, and a number.', 'error');
+      return;
+    }
+
+    try {
+      const btn = document.getElementById('btn-update-pwd');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+      const res = await fetch('/api/users/change-password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword })
+      });
+      const result = await res.json();
+
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+
+      if (res.ok && result.success) {
+        showToast('Password changed successfully.', 'success');
+        showFeedback('Your password has been changed successfully.', 'success');
+        changePasswordForm.reset();
+      } else {
+        showFeedback(result.message || 'Failed to change password.', 'error');
+      }
+    } catch (err) {
+      showFeedback('Network error. Please try again.', 'error');
+    }
+  });
+
+  function showFeedback(msg, type) {
+    if (!passwordFeedback) return;
+    passwordFeedback.textContent = msg;
+    passwordFeedback.className = `password-feedback ${type}`;
+    passwordFeedback.hidden = false;
+  }
+
+  // Password Visibility Toggle
+  document.querySelectorAll('.pwd-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = btn.parentElement.querySelector('input');
+      const icon = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+      } else {
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+      }
+    });
+  });
+
+  // Orders Management & Filtering
+  async function loadMyOrders(filter = 'all', page = 1) {
+    currentOrderFilter = filter;
+    currentOrderPage = page;
+    const container = document.getElementById('account-orders-container');
+    container.innerHTML = `
+      <div class="account-loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Loading your orders...</p>
+      </div>
+    `;
+
+    try {
+      const res = await fetch(`/api/orders/my-orders?status=${filter}&page=${page}&limit=5`, { credentials: 'include' });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        if (!result.data || result.data.length === 0) {
+          container.innerHTML = `
+            <div class="account-empty-state">
+              <div class="empty-state-icon"><i class="fas fa-bag-shopping"></i></div>
+              <h3>YOUR FRAGRANCE JOURNEY BEGINS HERE</h3>
+              <p>“You haven't placed an order yet.”</p>
+              <button class="btn btn-primary" onclick="closeAccountModal(); window.location.hash='#collection';">EXPLORE COLLECTION</button>
+            </div>
+          `;
+          document.getElementById('orders-pagination').hidden = true;
+          return;
+        }
+
+        container.innerHTML = result.data.map(order => {
+          const itemPreview = order.items.map(item => `
+            <div class="order-item-row">
+              <img src="${item.image || '/images/placeholder.jpg'}" alt="${item.name || 'Fragrance'}">
+              <div class="order-item-meta">
+                <span class="item-name">${item.name || 'Luxury Fragrance'}</span>
+                <span class="item-sub">Qty: ${item.quantity} &times; ₹${item.price.toLocaleString()}</span>
+              </div>
+              <span class="item-total">₹${((item.price || 0) * (item.quantity || 1)).toLocaleString()}</span>
+            </div>
+          `).join('');
+
+          return `
+            <div class="account-order-card">
+              <div class="order-card-header">
+                <div class="order-card-num-date">
+                  <span class="order-num">${order.orderNumber || 'N/A'}</span>
+                  <span class="order-dt">${new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                </div>
+                <div class="order-card-badges">
+                  <span class="badge status-${(order.orderStatus || 'pending').toLowerCase()}">${order.orderStatus}</span>
+                  <span class="badge payment-${(order.paymentStatus || 'pending').toLowerCase()}">Payment: ${order.paymentStatus}</span>
+                </div>
+              </div>
+              
+              <div class="order-items-preview">
+                ${itemPreview}
+              </div>
+
+              <div class="order-card-footer">
+                <div class="order-card-grand-total">
+                  Total: <strong>₹${(order.total || 0).toLocaleString()}</strong>
+                </div>
+                <div class="order-card-actions">
+                  <button class="btn btn-outline btn-sm" onclick="openClientOrderModal('${order._id}')">
+                    <i class="fas fa-file-invoice"></i> View Details
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        renderOrdersPagination(result.pagination);
+      } else {
+        container.innerHTML = `<p class="account-feedback error">We couldn't load your orders. ${result.message || ''}</p>`;
+      }
+    } catch (err) {
+      container.innerHTML = `<p class="account-feedback error">We couldn't load your orders. Please check your connection.</p>`;
+    }
+  }
+
+  // Render Pagination
+  function renderOrdersPagination(p) {
+    const pag = document.getElementById('orders-pagination');
+    if (!p || p.pages <= 1) {
+      pag.hidden = true;
+      return;
+    }
+
+    let html = '';
+    for (let i = 1; i <= p.pages; i++) {
+      html += `<button class="pagination-btn ${p.page === i ? 'active' : ''}" onclick="loadMyOrders('${currentOrderFilter}', ${i})">${i}</button>`;
+    }
+    pag.innerHTML = html;
+    pag.hidden = false;
+  }
+
+  // Filter Buttons Event Listeners
+  document.querySelectorAll('.order-filter-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.order-filter-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      loadMyOrders(e.target.dataset.filter, 1);
+    });
+  });
+
+  // Client Detailed Order Dossier Modal
+  const clientOrderModal = document.getElementById('client-order-modal');
+
+  window.openClientOrderModal = async function(orderId) {
+    if (!clientOrderModal) return;
+    
+    const body = document.getElementById('modal-client-order-body');
+    const footer = document.getElementById('modal-client-order-footer');
+    const title = document.getElementById('modal-client-order-number');
+    const dateSp = document.getElementById('modal-client-order-date');
+    const orderStatusBadge = document.getElementById('modal-client-order-status-badge');
+    const paymentBadge = document.getElementById('modal-client-payment-badge');
+    const timelineWrapper = document.getElementById('order-timeline-wrapper');
+
+    title.textContent = 'Order Dossier';
+    dateSp.textContent = '';
+    orderStatusBadge.className = 'badge';
+    orderStatusBadge.textContent = '';
+    paymentBadge.className = 'badge';
+    paymentBadge.textContent = '';
+    timelineWrapper.innerHTML = '';
+    
+    body.innerHTML = `
+      <div class="account-loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Loading order details...</p>
+      </div>
+    `;
+
+    clientOrderModal.classList.add('open');
+    clientOrderModal.setAttribute('aria-hidden', 'false');
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, { credentials: 'include' });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        const o = result.data;
+        title.textContent = `Order: ${o.orderNumber || 'N/A'}`;
+        dateSp.textContent = new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        orderStatusBadge.textContent = o.orderStatus;
+        orderStatusBadge.className = `badge status-${(o.orderStatus || 'pending').toLowerCase()}`;
+        
+        paymentBadge.textContent = `Payment: ${o.paymentStatus}`;
+        paymentBadge.className = `badge payment-${(o.paymentStatus || 'pending').toLowerCase()}`;
+
+        // Render visual timeline
+        renderVisualTimeline(o.orderStatus, timelineWrapper);
+
+        // Product list HTML
+        const itemsHtml = o.items.map(item => `
+          <tr>
+            <td>
+              <div class="dossier-item-cell">
+                <img src="${item.image || '/images/placeholder.jpg'}" alt="${item.name || 'Product'}">
+                <div>
+                  <strong>${item.name || 'Fragrance'}</strong>
+                </div>
+              </div>
+            </td>
+            <td>₹${(item.price || 0).toLocaleString()}</td>
+            <td>${item.quantity || 1}</td>
+            <td class="text-right"><strong>₹${((item.price || 0) * (item.quantity || 1)).toLocaleString()}</strong></td>
+          </tr>
+        `).join('');
+
+        // Address & summary Dossier HTML
+        const addr = o.shippingAddress || {};
+        body.innerHTML = `
+          <div class="dossier-section">
+            <h4>ACQUIRED CREATIONS</h4>
+            <table class="dossier-items-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Price</th>
+                  <th>Quantity</th>
+                  <th class="text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="dossier-summary-grid">
+            <!-- Shipping Details -->
+            <div class="dossier-info-box">
+              <h4>SHIPPING DOSSIER</h4>
+              <p><strong>Recipient:</strong> ${o.customer?.name || ''}</p>
+              <p><strong>Address:</strong> ${addr.address || ''}${addr.landmark ? ', ' + addr.landmark : ''}</p>
+              <p><strong>Location:</strong> ${addr.city || ''}, ${addr.state || ''} — ${addr.pincode || ''}</p>
+              <p><strong>Country:</strong> ${addr.country || 'India'}</p>
+              <p><strong>Contact:</strong> ${o.customer?.phone || ''}</p>
+            </div>
+
+            <!-- Price Summary details -->
+            <div class="dossier-info-box">
+              <h4>PRICE RECIPES</h4>
+              <div class="detail-item"><span>Subtotal:</span><span>₹${(o.subtotal || 0).toLocaleString()}</span></div>
+              ${o.discount ? `<div class="detail-item text-success"><span>Discount ${o.coupon?.code ? `(${o.coupon.code})` : ''}:</span><span>−₹${(o.discount || 0).toLocaleString()}</span></div>` : ''}
+              <div class="detail-item"><span>Tax (GST 18%):</span><span>₹${(o.tax || 0).toLocaleString()}</span></div>
+              <div class="detail-item"><span>Shipping:</span><span>${o.shipping === 0 ? 'Free' : '₹' + (o.shipping || 0).toLocaleString()}</span></div>
+              <div class="detail-item total"><span>Grand Total:</span><span class="text-gold">₹${(o.total || 0).toLocaleString()}</span></div>
+            </div>
+          </div>
+
+          <div class="dossier-section" style="margin-top: 1.5rem;">
+            <h4>PAYMENT AUDIT</h4>
+            <div class="dossier-info-box">
+              <p><strong>Method:</strong> ${(o.paymentMethod || 'COD').toUpperCase()}</p>
+              <p><strong>Status:</strong> ${o.paymentStatus || 'Pending'}</p>
+              ${o.transactionId ? `<p><strong>Audit Ref/Transaction ID:</strong> <code>${o.transactionId}</code></p>` : ''}
+            </div>
+          </div>
+        `;
+
+        // Render Reorder / buy again button if delivered
+        let footerHtml = '';
+        if (o.orderStatus?.toLowerCase() === 'delivered') {
+          footerHtml = `
+            <button class="btn btn-primary" onclick="handleReorder('${o._id}')">
+              <i class="fas fa-rotate-left"></i> BUY AGAIN / REORDER
+            </button>
+          `;
+        }
+        footerHtml += `<button class="btn btn-outline" onclick="closeClientOrderModal()">Close Dossier</button>`;
+        footer.innerHTML = footerHtml;
+
+      } else {
+        body.innerHTML = `<p class="account-feedback error">This order details could not be loaded: ${result.message || ''}</p>`;
+      }
+    } catch (err) {
+      body.innerHTML = '<p class="account-feedback error">Unable to establish connection to order registry.</p>';
+    }
+  };
+
+  window.closeClientOrderModal = function() {
+    if (!clientOrderModal) return;
+    clientOrderModal.classList.remove('open');
+    clientOrderModal.setAttribute('aria-hidden', 'true');
+  };
+
+  document.querySelector('.order-modal-close')?.addEventListener('click', closeClientOrderModal);
+  document.querySelector('.order-modal-overlay')?.addEventListener('click', closeClientOrderModal);
+
+  // Render Visual Timeline
+  function renderVisualTimeline(status, wrapper) {
+    const st = (status || 'pending').toLowerCase();
+    
+    if (st === 'cancelled') {
+      wrapper.innerHTML = `
+        <div class="timeline-cancelled-box">
+          <i class="fas fa-circle-xmark"></i>
+          <div>
+            <strong>Order Cancelled</strong>
+            <p style="font-size:0.75rem; margin:0; color:#c62828;">This order has been cancelled and is not being fulfilled.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const steps = ['confirmed', 'processing', 'shipped', 'delivered'];
+    const labels = {
+      confirmed: 'Order Confirmed',
+      processing: 'Processing',
+      shipped: 'Shipped',
+      delivered: 'Delivered'
+    };
+
+    let currentIndex = steps.indexOf(st);
+    if (currentIndex === -1 && st === 'pending') {
+      currentIndex = 0; // fallback to first step active
+    }
+
+    const stepsHtml = steps.map((step, index) => {
+      let stepClass = '';
+      let icon = `<i class="fas fa-circle"></i>`;
+
+      if (index < currentIndex) {
+        stepClass = 'completed';
+        icon = `<i class="fas fa-check"></i>`;
+      } else if (index === currentIndex) {
+        stepClass = 'active';
+        icon = `<i class="fas fa-circle-dot fa-pulse"></i>`;
+      }
+
+      return `
+        <div class="timeline-step ${stepClass}">
+          <div class="timeline-icon">${icon}</div>
+          <span class="timeline-label">${labels[step]}</span>
+        </div>
+      `;
+    }).join('');
+
+    wrapper.innerHTML = `<div class="timeline-steps">${stepsHtml}</div>`;
+  }
+
+  // Buy Again / Reorder function
+  window.handleReorder = async function(orderId) {
+    try {
+      showToast('Auditing stock for reorder...', 'info');
+      // 1. Fetch current order items
+      const orderRes = await fetch(`/api/orders/${orderId}`, { credentials: 'include' });
+      const orderResult = await orderRes.json();
+      if (!orderRes.ok || !orderResult.success) throw new Error('Failed to retrieve past order items.');
+
+      const pastItems = orderResult.data.items || [];
+
+      // 2. Fetch fresh catalog from MongoDB
+      const prodRes = await fetch('/api/products?limit=100');
+      const prodResult = await prodRes.json();
+      if (!prodRes.ok || !prodResult.success) throw new Error('Failed to retrieve catalog status.');
+
+      const freshProducts = prodResult.data || [];
+      let addedCount = 0;
+      let unavailableNames = [];
+
+      // 3. Match items, verify existence and stock
+      for (const item of pastItems) {
+        const matchedProd = freshProducts.find(p => p._id === item.productId || p.name === item.name);
+        
+        if (!matchedProd) {
+          unavailableNames.push(item.name || 'Unidentified item');
+          continue;
+        }
+
+        if (matchedProd.stock <= 0) {
+          unavailableNames.push(`${matchedProd.name} (Out of Stock)`);
+          continue;
+        }
+
+        // Add to cart with current MongoDB price
+        const quantityToAdd = Math.min(item.quantity || 1, matchedProd.stock);
+        addToCartLocally(matchedProd, quantityToAdd);
+        addedCount += quantityToAdd;
+      }
+
+      // Show notifications
+      if (addedCount > 0) {
+        showToast(`${addedCount} fragrances were added to your collection.`, 'success');
+      }
+
+      if (unavailableNames.length > 0) {
+        unavailableNames.forEach(name => {
+          showToast(`${name} is currently unavailable.`, 'error');
+        });
+      }
+
+      // Close modal and open cart drawer
+      closeClientOrderModal();
+      closeAccountModal();
+      openCartDrawer();
+
+    } catch (err) {
+      showToast(err.message || 'Error processing reorder request.', 'error');
+    }
+  };
+
+  // Local Cart add helper
+  function addToCartLocally(product, qty) {
+    const existing = cart.find(item => item._id === product._id);
+    if (existing) {
+      existing.quantity = Math.min(existing.quantity + qty, product.stock);
+    } else {
+      cart.push({
+        _id: product._id,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        stock: product.stock,
+        quantity: qty
+      });
+    }
+    localStorage.setItem('eloriaCart', JSON.stringify(cart));
+    updateCartUI();
+  }
+
+  // Wishlist Tab Render inside Account
+  async function loadWishlistInAccount() {
+    const container = document.getElementById('account-wishlist-container');
+    const headerCount = document.getElementById('wishlist-header-count');
+    
+    container.innerHTML = `
+      <div class="account-loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Loading saved fragrances...</p>
+      </div>
+    `;
+
+    try {
+      if (!allProducts || allProducts.length === 0) {
+        allProducts = await loadProducts();
+      }
+
+      const saved = allProducts.filter(p => wishlist.includes(p._id));
+      headerCount.textContent = `${saved.length} items`;
+
+      if (saved.length === 0) {
+        container.innerHTML = `
+          <div class="account-empty-state" style="grid-column: span 3;">
+            <div class="empty-state-icon"><i class="fas fa-heart"></i></div>
+            <h3>YOUR WISHLIST IS EMPTY</h3>
+            <p>Save fragrances while browsing to view them here.</p>
+            <button class="btn btn-primary" onclick="closeAccountModal(); window.location.hash='#collection';">EXPLORE COLLECTION</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = saved.map(p => `
+        <div class="account-wishlist-card">
+          <img src="${p.image || '/images/placeholder.jpg'}" alt="${p.name || ''}" onerror="this.src='/images/placeholder.jpg'">
+          <h4>${p.name}</h4>
+          <p class="wishlist-price">₹${(p.price || 0).toLocaleString()}</p>
+          <span class="badge ${p.stock > 0 ? 'status-delivered' : 'status-cancelled'}" style="margin-bottom:0.75rem;">
+            ${p.stock > 0 ? 'In Stock' : 'Out of Stock'}
+          </span>
+          <div class="wishlist-actions">
+            <button class="btn btn-primary btn-sm" onclick="handleWishlistAddToCart('${p._id}')" ${p.stock <= 0 ? 'disabled' : ''}>
+              <i class="fas fa-shopping-bag"></i> ADD TO CART
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="handleWishlistRemove('${p._id}')">
+              <i class="fas fa-trash"></i> Remove
+            </button>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = '<p class="account-feedback error">Error loading wishlist creations.</p>';
+    }
+  }
+
+  // Wishlist Action Wrappers
+  window.handleWishlistAddToCart = function(productId) {
+    const p = allProducts.find(prod => prod._id === productId);
+    if (p) {
+      addToCartLocally(p, 1);
+      showToast(`${p.name} added to cart.`, 'success');
+    }
+  };
+
+  window.handleWishlistRemove = function(productId) {
+    toggleWishlist(productId);
+    loadWishlistInAccount();
+    refreshAccountSummaryStats();
+  };
+
+  // Click handler to route My Account sidebar clicks
+  document.querySelectorAll('.account-nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const tab = e.currentTarget.dataset.tab;
+      if (tab) {
+        showAccountView(tab);
+      }
+    });
+  });
+
+  // Account Menu items clicks
+  document.querySelectorAll('.account-view-link').forEach(link => {
+    link.addEventListener('click', () => {
+      showAccountView(link.dataset.tab);
+    });
+  });
+
+  // Modal Closures
   document.querySelector('.account-close')?.addEventListener('click', closeAccountModal);
   document.querySelector('.account-overlay')?.addEventListener('click', closeAccountModal);
+
+  // Link clicks inside user summary stat cards
+  document.querySelectorAll('.account-stat-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const action = card.dataset.action;
+      if (action === 'filter-orders') {
+        showAccountView('orders');
+        const status = card.dataset.status;
+        const filterBtn = document.querySelector(`.order-filter-btn[data-filter="${status}"]`);
+        if (filterBtn) filterBtn.click();
+      } else if (action === 'view-wishlist') {
+        showAccountView('wishlist');
+      }
+    });
+  });
 
   // Testimonials Slider
   const testimonialSlides = document.querySelectorAll('.testimonial-slide');
@@ -1696,7 +2368,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const email = newsletterForm.querySelector('input[type="email"]').value;
     
     try {
-      const response = await fetch('http://localhost:5001/api/subscribers', {
+      const response = await fetch('/api/subscribers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -1734,7 +2406,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       
       try {
-        const response = await fetch('http://localhost:5001/api/contact', {
+        const response = await fetch('/api/contact', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(contactData)
@@ -1794,6 +2466,13 @@ document.addEventListener('DOMContentLoaded', () => {
   updateWishlistUI();
   observeScrollAnimations();
   
+  function handleHashRoute() {
+    const hash = window.location.hash;
+    if (hash === '#account') {
+      showAccountView('profile');
+    }
+  }
+
   // Check authentication on page load
   checkAuthentication().then(auth => {
     console.log('Auth check on load:', auth);
@@ -1801,8 +2480,13 @@ document.addEventListener('DOMContentLoaded', () => {
       currentUser = auth.user;
       console.log('Current user set:', currentUser);
       updateAuthUI();
+      handleHashRoute();
+    } else if (window.location.hash === '#account') {
+      requireAuthentication('#account');
     }
   });
+
+  window.addEventListener('hashchange', handleHashRoute);
 });
 
 // Make search and modal functions globally accessible
